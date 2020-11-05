@@ -4,9 +4,9 @@ This repository provides two CloudFormation templates which configure the AWS Si
 
 ## Architecture
 
-There are two templates provided to provide two different deployment options. Both options provide the same tunnel configuration options but terminate on different AWS resources.
+There are two templates which offer different deployment options. Both options provide the same tunnel configuration options to support NCSC guidance, but each templates terminates on different AWS resources. Either a TGW or a VPC.
 
-The main configuration values of interest are:
+The main configuration values of interest to support NCSC are:
 
 | **Configuration parameter** | **Value** |
 | :------ | :------ |
@@ -23,9 +23,17 @@ The first option will deploy a TGW VPN as per https://docs.aws.amazon.com/vpc/la
 - Allows easy access from multiple VPC's
 - Allows the use of ECMP allowing multiple tunnels to be used increasing bandwidth
 
+<img src="images/tgw-vpn.png"
+     alt="TGW VPN"
+     style="float: left; margin-right: 10px;" />
+
 ### Option 2 - AWS VPC VPN
 
 The second option will deploy a VPC VPN as per https://docs.aws.amazon.com/vpn/latest/s2svpn/SetUpVPNConnections.html#vpn-create-target-gateway.
+
+<img src="images/vpc-vpn.png"
+     alt="TGW VPN"
+     style="float: left; margin-right: 10px;" />
 
 ## Deployment
 
