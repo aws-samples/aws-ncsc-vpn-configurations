@@ -63,6 +63,7 @@ During the stack creation process you will need to provide the following values:
 Depending on the deployment type you created you will also have to provide one of the following values.
 
 | **Parameter** | **Value** |
+| :------ | :------ |
 |TGW|The ID or your TGW|
 |VPC|The ID of your VPC|
 
