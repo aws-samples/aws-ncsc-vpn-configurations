@@ -49,8 +49,8 @@ To support certificates with the AWS Site-to-Site VPN service users will first n
 
 First select which template best meets you requirement:
 
-- [TGW deployment](main/CloudFormation/vpn-tgw-product.yaml)
-- [VPC deployment](main/CloudFormation/vpn-vpc-product.yaml)
+- [TGW deployment](CloudFormation/vpn-tgw-product.yaml)
+- [VPC deployment](CloudFormation/vpn-vpc-product.yaml)
 
 Once you have selected the design pattern follow the guide to [create your stack](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/cfn-console-create-stack.html).
 
