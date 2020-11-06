@@ -4,7 +4,7 @@ This repository provides two CloudFormation templates which configure the AWS Si
 
 ## Architecture
 
-Two templates are provided to offer different deployment options. The first template includes an [AWS Transit Gateway](https://aws.amazon.com/transit-gateway/) service. The second terminates the VPN connection on a [Virtual private gateway](https://aws.amazon.com/vpn/faqs/#Virtual_private_gateway). Both options provide the same IPSec tunnel configuration parameters
+Two templates are provided to offer different deployment options. The first template's service connect to an existing [AWS Transit Gateway](https://aws.amazon.com/transit-gateway/) service. The second terminates the VPN connection on a [Virtual private gateway](https://aws.amazon.com/vpn/faqs/#Virtual_private_gateway). Both options provide the same IPSec tunnel configuration parameters
 
 The main configuration values of interest to support NCSC guidance are:
 
