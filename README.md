@@ -4,9 +4,9 @@ This repository provides two CloudFormation templates which configure the AWS Si
 
 ## Architecture
 
-There are two templates which offer different deployment options. Both options provide the same tunnel configuration options to support NCSC guidance, but each templates terminates on different AWS resources. Either a TGW or a VPC.
+Two templates are provided to offer different deployment options. The first template's service connect to an existing [AWS Transit Gateway](https://aws.amazon.com/transit-gateway/) service. The second terminates the VPN connection on a [Virtual private gateway](https://aws.amazon.com/vpn/faqs/#Virtual_private_gateway). Both options provide the same IPSec tunnel configuration parameters
 
-The main configuration values of interest to support NCSC are:
+The main configuration values of interest to support NCSC guidance are:
 
 | **Configuration parameter** | **Value** |
 | :------ | :------ |
@@ -39,17 +39,18 @@ The second option will deploy a VPC VPN as per https://docs.aws.amazon.com/vpn/l
 
 ### Prerequisites
 
-To support certificates with the AWS Site-to-Site VPN service users will first need to create a subordinate certificate authority using AWS Certificate Manager Private Certificate Authority. The following guides can be used to setup the CA and issue the certificate.
+To support certificates with the AWS Site-to-Site VPN service users will first need to create a subordinate certificate authority using [AWS Certificate Manager Private Certificate Authority](https://aws.amazon.com/certificate-manager/private-certificate-authority/). The following guides can be used to setup the CA and issue the certificate.
 
 [Create private subordinate CA and (if required) root CA](https://docs.aws.amazon.com/acm-pca/latest/userguide//PCACertInstall.html#InstallSubordinateExternal)
+
 [Issue private RSA 2048 certificate for the VPN](https://docs.aws.amazon.com/acm/latest/userguide/gs-acm-request-private.html)
 
 ### CloudFormation
 
-Fist select which template best meets you requirement:
+First select which template best meets you requirement:
 
-- [TGW deployment](main/CloudFormation/vpn-tgw-product.yaml)
-- [VPC deployment](main/CloudFormation/vpn-vpc-product.yaml)
+- [TGW deployment](CloudFormation/vpn-tgw-product.yaml)
+- [VPC deployment](CloudFormation/vpn-vpc-product.yaml)
 
 Once you have selected the design pattern follow the guide to [create your stack](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/cfn-console-create-stack.html).
 

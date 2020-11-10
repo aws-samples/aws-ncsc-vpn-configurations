@@ -54,14 +54,15 @@ Parameters:
     Type: String
     Default: SHA2-512
     AllowedValues: [SHA2-256, SHA2-384, SHA2-512]
+
 Resources:
-# Setup VPN
+  # Setup VPN
   VPN:
     Type: AWS::EC2::VPNConnection
-    Properties: 
+    Properties:
       CustomerGatewayId: !GetAtt CGWInvoke.CGWID
-      StaticRoutesOnly: 'false'
-      Tags: 
+      StaticRoutesOnly: "false"
+      Tags:
         - Key: Framework
           Value: PALZ
       TransitGatewayId: !Ref TGW
@@ -74,176 +75,177 @@ Resources:
           import boto3
           import time
           import cfnresponse as cf
-          import string
-          import random
+          import uuid
+          import json
 
           c = boto3.client('ec2')
           iam_c = boto3.client('iam')
 
-          def rndStr():
-              l = string.ascii_lowercase
-              return ''.join(random.choice(l) for i in range(8))
-
-          def create_cgw(bgp,ip,cert,dev_name):
+          def create_cgw(bgp, ip, cert, dev_name, stack_id):
               response = c.create_customer_gateway(
-              BgpAsn=bgp,
-              PublicIp=ip,
-              CertificateArn=cert,
-              Type='ipsec.1',
-              DeviceName=dev_name,
-              DryRun=False
+                  BgpAsn=bgp,
+                  PublicIp=ip,
+                  CertificateArn=cert,
+                  Type='ipsec.1',
+                  DeviceName=dev_name,
+                  TagSpecifications=[{
+                      'ResourceType': 'customer-gateway',
+                      'Tags': [
+                          {'Key': 'Name', 'Value': dev_name},
+                          {'Key': 'StackId', 'Value': stack_id}
+                      ]
+                  }]
               )
               return response
+          def check_tags(tagsDict, key, value):
+              for tag in tagsDict:
+                  if key in tag['Key'] and value in tag['Value']:
+                      return True
           def get_cgw():
               response = c.describe_customer_gateways(
-              Filters=[],
-              DryRun=False
+                  Filters=[]
               )
               return response
+          def find_cgw(gateways, tag_name, tag_value):
+              for gw in gateways:
+                  if gw.get('DeviceName') == tag_value and 'available' in gw['State']:
+                      gw_exists = True
+                      gw_id = gw['CustomerGatewayId']
+                      return gw_id, gw_exists
+                  elif check_tags(gw['Tags'], tag_name, tag_value) and 'available' in gw['State']:
+                      gw_exists = True
+                      gw_id = gw['CustomerGatewayId']
+                      return gw_id, gw_exists
+              else:
+                  return None, False
           def delete_cgw(cgw_id):
               response = c.delete_customer_gateway(
-              CustomerGatewayId=cgw_id,
-              DryRun=False
+                  CustomerGatewayId=cgw_id
               )
               return response
           def cgw_status(cgw_id):
-              print('Checking CGW Status')
               response = c.describe_customer_gateways(
-              CustomerGatewayIds=[
-                  cgw_id,
-              ],
-              DryRun=False
+                  CustomerGatewayIds=[
+                      cgw_id,
+                  ]
               )
-              status = response['CustomerGateways'][0]['State']
-              return status
+              return response['CustomerGateways'][0]['State']
           def check_role():
-              response = iam_c.get_role(
-              RoleName='AWSServiceRoleForVPCS2SVPN'
-              )
-              return response
+              Try:
+                  response = iam_c.get_role(
+                      RoleName='AWSServiceRoleForVPCS2SVPN'
+                  )
+                  return response
+              Except:
+                return False
           def create_role():
-              response = iam_c.create_service_linked_role(
-              AWSServiceName='s2svpn.amazonaws.com',
+              iam_c.create_service_linked_role(
+                  AWSServiceName='s2svpn.amazonaws.com',
               )
           def handler(event, context):
-
+              print(event)
+              responseData = {}
+              bgp = int(event['ResourceProperties']['bgpASN'])
+              ip = event['ResourceProperties']['ipADDR']
+              cert = event['ResourceProperties']['certARN']
+              dev_name = event['ResourceProperties']['deviceNAME'] + \
+                  '-' + str(uuid.uuid1())[0:6]
               try:
-                  responseData = {}
-
-                  bgp = int(event['ResourceProperties']['bgpASN'])
-                  ip = event['ResourceProperties']['ipADDR']
-                  cert = event['ResourceProperties']['certARN']
-                  dev_name = event['ResourceProperties']['deviceNAME'] + '-' + rndStr()
-
                   existing_cgw = get_cgw()
                   gateways = existing_cgw['CustomerGateways']
-
                   gw_exists = False
                   gw_id = ''
-
-                  for gw in gateways:
-                      if gw['DeviceName'] == dev_name:
-                          if gw['State'] == 'available':
-                              gw_exists = True
-                              gw_id = gateway['CustomerGatewayId']
-
-                  if event['RequestType'] == 'Create':
-                      if gw_exists:
-                          print('A CGW with the same name already exists')
-                          cf.send(event, context, cf.FAILED, responseData, 'created')
-
-                      print('Checking if Service Role for VPN Exists')
-                      try:
-                          role_status = check_role()
-                          print('Service Role for VPN exists')
-                      except Exception:
-                          print('Role does not exist; Creating Role')
-                          create_role()
-                          print('Role created')
-                      print('Creating CGW')
-                      try:
-                          new_cgw = create_cgw(bgp,ip,cert,dev_name)
-                          cgw_id = new_cgw['CustomerGateway']['CustomerGatewayId']
-                          while cgw_status(cgw_id) != 'available':
-                              print('CGW creating')
-                              time.sleep(10)
-                          print('CGW created')
-                          responseData['CGWID'] = cgw_id
-                          cf.send(event, context, cf.SUCCESS, responseData, 'createdCGW')
-                      except Exception as e:
-                          responseData['error'] = str(e)
-                          cf.send(event, context, cf.FAILED, responseData, 'errorCGW')
-                  elif event['RequestType'] == 'Delete':
-                      if not gw_exists:
-                          cf.send(event, context, cf.SUCCESS, responseData, 'deletedCGW')
-                      print('Deleting CGW')
-                      try:
-                          delete_cgw(gw_id)
-                          while cgw_status(cgw_id) != 'deleted':
-                              print('CGW deleting')
-                              time.sleep(10)
-                          print('CGW deleted')
-                          responseData['CGWID'] = cgw_id
-                          cf.send(event, context, cf.SUCCESS, responseData, 'deletedCGW')
-                      except Exception as e:
-                          responseData['error'] = str(e)
-                          cf.send(event, context, cf.SUCCESS, responseData, 'errorCGW')
+                  stack_id = event['StackId'].split('/')[1]
+              except Exception as err:
+                  print(err)
+              if event['RequestType'] == 'Create':
+                  gw_id, gw_exists = find_cgw(gateways, 'Name', dev_name)
+                  if gw_exists:
+                      cf.send(event, context, cf.FAILED, responseData, 'created')
+                  if check_role():
+                      print('Role exists')
                   else:
-                      cf.send(event, context, cf.SUCCESS, responseData, 'NoChangeCGW')
-              except Exception as e:
-                  responseData['error'] = str(e)
-                  cf.send(event, context, cf.FAILED, responseData, 'errorCGW')
+                      create_role()
+                  try:
+                      new_cgw = create_cgw(bgp, ip, cert, dev_name, stack_id)
+                      cgw_id = new_cgw['CustomerGateway']['CustomerGatewayId']
+                      while cgw_status(cgw_id) != 'available':
+                          time.sleep(10)
+                      responseData['CGWID'] = cgw_id
+                      cf.send(event, context, cf.SUCCESS, responseData, 'createdCGW')
+                  except Exception as e:
+                      responseData['error'] = str(e)
+                      cf.send(event, context, cf.FAILED, responseData, 'errorCGW')
+              elif event['RequestType'] == 'Delete':
+                  cgw_id, gw_exists = find_cgw(gateways, 'StackId', stack_id)
+                  if not gw_exists:
+                    cf.send(event, context, cf.SUCCESS, responseData, 'deletedCGW')
+                    return
+                  try:
+                    delete_cgw(cgw_id)
+                    while cgw_status(cgw_id) != 'deleted':
+                        time.sleep(10)
+                    responseData['CGWID'] = cgw_id
+                    cf.send(event, context, cf.SUCCESS, responseData, 'deletedCGW')
+                  except Exception as e:
+                    responseData['error'] = str(e)
+                    cf.send(event, context, cf.SUCCESS, responseData, 'errorCGW')
+              else:
+                  cf.send(event, context, cf.SUCCESS, responseData, 'NoChangeCGW')
       Description: Lambda to create CGW
       Handler: index.handler
       MemorySize: 128
       Role: !GetAtt CGWLambdaRole.Arn
       Runtime: python3.7
-      Timeout: '900'
+      Timeout: "900"
       Environment:
         Variables:
           Region: !Sub ${AWS::Region}
   CGWLambdaRole:
-    Type: 'AWS::IAM::Role'
+    Type: "AWS::IAM::Role"
     Properties:
       AssumeRolePolicyDocument:
-        Version: '2012-10-17'
+        Version: "2012-10-17"
         Statement:
-        - Effect: Allow
-          Principal:
-            Service: 'lambda.amazonaws.com'
-          Action:
-          - 'sts:AssumeRole'
-      Path: '/'
-      ManagedPolicyArns:
-      - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
-      Policies:
-      - PolicyName: CGWPermissions
-        PolicyDocument:
-          Version: 2012-10-17
-          Statement:
-          - Sid: CGWFullControl
-            Effect: Allow
+          - Effect: Allow
+            Principal:
+              Service: "lambda.amazonaws.com"
             Action:
-            - ec2:CreateCustomerGateway
-            - ec2:DescribeCustomerGateways
-            - ec2:DeleteCustomerGateway
-            - iam:GetRole
-            - iam:CreateServiceLinkedRole
-            - iam:GetRolePolicy
-            Resource:
-            - '*'
+              - "sts:AssumeRole"
+      Path: "/"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+      Policies:
+        - PolicyName: CGWPermissions
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Sid: CGWFullControl
+                Effect: Allow
+                Action:
+                  - ec2:CreateCustomerGateway
+                  - ec2:DescribeCustomerGateways
+                  - ec2:DeleteCustomerGateway
+                  - ec2:DescribeTags
+                  - ec2:CreateTags
+                  - ec2:DeleteTags
+                  - iam:GetRole
+                  - iam:CreateServiceLinkedRole
+                  - iam:GetRolePolicy
+                Resource:
+                  - "*"
   CGWInvoke:
     Type: Custom::CGWInvoke
-    Version: '1.0'
-    Properties: 
-        ServiceToken: !GetAtt CGWLambda.Arn
-        FunctionName: !Ref CGWLambda
-        Region: !Ref 'AWS::Region'
-        bgpASN: !Ref OnPremBGP
-        ipADDR: !Ref OnPremIP
-        certARN: !Ref PrivCert
-        deviceNAME: !Ref OnPremDevice
-# Modify VPN
+    Version: "1.0"
+    Properties:
+      ServiceToken: !GetAtt CGWLambda.Arn
+      FunctionName: !Ref CGWLambda
+      Region: !Ref "AWS::Region"
+      bgpASN: !Ref OnPremBGP
+      ipADDR: !Ref OnPremIP
+      certARN: !Ref PrivCert
+      deviceNAME: !Ref OnPremDevice
+  # Modify VPN
   VPNLambda:
     Type: AWS::Lambda::Function
     Properties:
@@ -367,53 +369,53 @@ Resources:
       MemorySize: 128
       Role: !GetAtt VPNLambdaRole.Arn
       Runtime: python3.7
-      Timeout: '900'
+      Timeout: "900"
       Environment:
         Variables:
           Region: !Sub ${AWS::Region}
   VPNLambdaRole:
-    Type: 'AWS::IAM::Role'
+    Type: "AWS::IAM::Role"
     Properties:
       AssumeRolePolicyDocument:
-        Version: '2012-10-17'
+        Version: "2012-10-17"
         Statement:
-        - Effect: Allow
-          Principal:
-            Service: 'lambda.amazonaws.com'
-          Action:
-          - 'sts:AssumeRole'
-      Path: '/'
-      ManagedPolicyArns:
-      - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
-      Policies:
-      - PolicyName: VPNModifyPermissions
-        PolicyDocument:
-          Version: 2012-10-17
-          Statement:
-          - Sid: ModifyVPN
-            Effect: Allow
+          - Effect: Allow
+            Principal:
+              Service: "lambda.amazonaws.com"
             Action:
-            - ec2:ModifyVpnTunnelOptions
-            - ec2:ModifyVpnTunnelCertificate
-            - ec2:ModifyVpnConnection
-            - ec2:DescribeVpnConnections
-            Resource:
-            - '*'
+              - "sts:AssumeRole"
+      Path: "/"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+      Policies:
+        - PolicyName: VPNModifyPermissions
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Sid: ModifyVPN
+                Effect: Allow
+                Action:
+                  - ec2:ModifyVpnTunnelOptions
+                  - ec2:ModifyVpnTunnelCertificate
+                  - ec2:ModifyVpnConnection
+                  - ec2:DescribeVpnConnections
+                Resource:
+                  - "*"
   VPNInvoke:
     Type: Custom::VPNInvoke
-    Version: '1.0'
+    Version: "1.0"
     DependsOn: VPN
-    Properties: 
-        ServiceToken: !GetAtt VPNLambda.Arn
-        FunctionName: !Ref VPNLambda
-        Region: !Ref 'AWS::Region'
-        vpnID: !Ref VPN
-        dhGROUPONE: !Ref DHGroupOne
-        dhGROUPTWO: !Ref DHGroupTwo
-        CryptoP1: !Ref Phase1EncryptionAlgorithms
-        CryptoP2: !Ref Phase2EncryptionAlgorithms
-        IntP1: !Ref Phase1IntegrityAlgorithms
-        IntP2: !Ref Phase2IntegrityAlgorithms
+    Properties:
+      ServiceToken: !GetAtt VPNLambda.Arn
+      FunctionName: !Ref VPNLambda
+      Region: !Ref "AWS::Region"
+      vpnID: !Ref VPN
+      dhGROUPONE: !Ref DHGroupOne
+      dhGROUPTWO: !Ref DHGroupTwo
+      CryptoP1: !Ref Phase1EncryptionAlgorithms
+      CryptoP2: !Ref Phase2EncryptionAlgorithms
+      IntP1: !Ref Phase1IntegrityAlgorithms
+      IntP2: !Ref Phase2IntegrityAlgorithms
 Outputs:
   VPNID:
     Description: ID of the VPN Connection that has been established
