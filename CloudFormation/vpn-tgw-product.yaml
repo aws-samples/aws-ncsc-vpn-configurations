@@ -76,122 +76,123 @@ Resources:
           import time
           import cfnresponse as cf
           import uuid
+          import json
 
           c = boto3.client('ec2')
           iam_c = boto3.client('iam')
 
-          def create_cgw(bgp,ip,cert,dev_name):
+          def create_cgw(bgp, ip, cert, dev_name, stack_id):
               response = c.create_customer_gateway(
-              BgpAsn=bgp,
-              PublicIp=ip,
-              CertificateArn=cert,
-              Type='ipsec.1',
-              DeviceName=dev_name,
-              TagSpecifications=[{
-                  'ResourceType': 'customer-gateway',
-                  'Tags': [{ 'Key': 'Name', 'Value': dev_name }]
-                }]
+                  BgpAsn=bgp,
+                  PublicIp=ip,
+                  CertificateArn=cert,
+                  Type='ipsec.1',
+                  DeviceName=dev_name,
+                  TagSpecifications=[{
+                      'ResourceType': 'customer-gateway',
+                      'Tags': [
+                          {'Key': 'Name', 'Value': dev_name},
+                          {'Key': 'StackId', 'Value': stack_id}
+                      ]
+                  }]
               )
               return response
           def check_tags(tagsDict, key, value):
               for tag in tagsDict:
-                if key in tag['Key'] and value in tag['Value']:
-                  return True
+                  if key in tag['Key'] and value in tag['Value']:
+                      return True
           def get_cgw():
               response = c.describe_customer_gateways(
-              Filters=[]
+                  Filters=[]
               )
               return response
+          def find_cgw(gateways, tag_name, tag_value):
+              for gw in gateways:
+                  if gw.get('DeviceName') == tag_value and 'available' in gw['State']:
+                      gw_exists = True
+                      gw_id = gw['CustomerGatewayId']
+                      return gw_id, gw_exists
+                  elif check_tags(gw['Tags'], tag_name, tag_value) and 'available' in gw['State']:
+                      gw_exists = True
+                      gw_id = gw['CustomerGatewayId']
+                      return gw_id, gw_exists
+              else:
+                  return None, False
           def delete_cgw(cgw_id):
               response = c.delete_customer_gateway(
-              CustomerGatewayId=cgw_id
+                  CustomerGatewayId=cgw_id
               )
               return response
           def cgw_status(cgw_id):
               print('Checking CGW Status')
               response = c.describe_customer_gateways(
-              CustomerGatewayIds=[
-                  cgw_id,
-              ]
+                  CustomerGatewayIds=[
+                      cgw_id,
+                  ]
               )
-              status = response['CustomerGateways'][0]['State']
-              return status
+              return response['CustomerGateways'][0]['State']
           def check_role():
               response = iam_c.get_role(
-              RoleName='AWSServiceRoleForVPCS2SVPN'
+                  RoleName='AWSServiceRoleForVPCS2SVPN'
               )
               return response
           def create_role():
-              response = iam_c.create_service_linked_role(
-              AWSServiceName='s2svpn.amazonaws.com',
+              iam_c.create_service_linked_role(
+                  AWSServiceName='s2svpn.amazonaws.com',
               )
           def handler(event, context):
+              responseData = {}
+              bgp = int(event['ResourceProperties']['bgpASN'])
+              ip = event['ResourceProperties']['ipADDR']
+              cert = event['ResourceProperties']['certARN']
+              dev_name = event['ResourceProperties']['deviceNAME'] + \
+                  '-' + str(uuid.uuid1())[0:6]
               try:
-                  responseData = {}
-                  bgp = int(event['ResourceProperties']['bgpASN'])
-                  ip = event['ResourceProperties']['ipADDR']
-                  cert = event['ResourceProperties']['certARN']
-                  dev_name = event['ResourceProperties']['deviceNAME'] + '-' + str(uuid.uuid1())[0:6]
                   existing_cgw = get_cgw()
                   gateways = existing_cgw['CustomerGateways']
-
                   gw_exists = False
                   gw_id = ''
-
-                  for gw in gateways:
-                    if gw.get('DeviceName') == dev_name and 'available' in gw['State']:
-                       gw_exists = True
-                       gw_id = gw['CustomerGatewayId']
-                       break
-                    else:
-                      if check_tags(gw['Tags'], 'Name', dev_name) and 'available' in gw['State']:
-                          gw_exists = True
-                          gw_id = gw['CustomerGatewayId']
-                          break
-                      continue
-                    break
-
-                  if event['RequestType'] == 'Create':
-                      if gw_exists:
-                          print('A CGW with that name exists')
-                          cf.send(event, context, cf.FAILED, responseData, 'created')
-                      print('Check SLR...')
-                      if check_role():
-                        print('Role exists')
-                      else:
-                        create_role()
-                        print('Role created')
-                      print('Creating CGW')
-                      try:
-                          new_cgw = create_cgw(bgp,ip,cert,dev_name)
-                          cgw_id = new_cgw['CustomerGateway']['CustomerGatewayId']
-                          while cgw_status(cgw_id) != 'available':
-                              time.sleep(10)
-                          print('CGW created')
-                          responseData['CGWID'] = cgw_id
-                          cf.send(event, context, cf.SUCCESS, responseData, 'createdCGW')
-                      except Exception as e:
-                          responseData['error'] = str(e)
-                          cf.send(event, context, cf.FAILED, responseData, 'errorCGW')
-                  elif event['RequestType'] == 'Delete':
-                      if not gw_exists:
-                          cf.send(event, context, cf.SUCCESS, responseData, 'deletedCGW')
-                      print('Deleting CGW')
-                      try:
-                          delete_cgw(gw_id)
-                          while cgw_status(cgw_id) != 'deleted':
-                              time.sleep(10)
-                          print('CGW deleted')
-                          responseData['CGWID'] = cgw_id
-                          cf.send(event, context, cf.SUCCESS, responseData, 'deletedCGW')
-                      except Exception as e:
-                          responseData['error'] = str(e)
-                          cf.send(event, context, cf.SUCCESS, responseData, 'errorCGW')
+                  stack_id = event['StackId'].split('/')[1]
+              except Exception as err:
+                  print(err)
+              if event['RequestType'] == 'Create':
+                  gw_id, gw_exists = find_cgw(gateways, 'Name', dev_name)
+                  if gw_exists:
+                      print('CGW with that name exists')
+                      cf.send(event, context, cf.FAILED, responseData, 'created')
+                  print('Check SLR')
+                  if check_role():
+                      print('Role exists')
                   else:
-                      cf.send(event, context, cf.SUCCESS, responseData, 'NoChangeCGW')
-              except Exception as e:
-                  responseData['error'] = str(e)
-                  cf.send(event, context, cf.FAILED, responseData, 'errorCGW')
+                      create_role()
+                  print('Creating CGW')
+                  try:
+                      new_cgw = create_cgw(bgp, ip, cert, dev_name, stack_id)
+                      cgw_id = new_cgw['CustomerGateway']['CustomerGatewayId']
+                      while cgw_status(cgw_id) != 'available':
+                          time.sleep(10)
+                      responseData['CGWID'] = cgw_id
+                      cf.send(event, context, cf.SUCCESS, responseData, 'createdCGW')
+                  except Exception as e:
+                      responseData['error'] = str(e)
+                      cf.send(event, context, cf.FAILED, responseData, 'errorCGW')
+              elif event['RequestType'] == 'Delete':
+                  cgw_id, gw_exists = find_cgw(gateways, 'StackId', stack_id)
+                  if not gw_exists:
+                    cf.send(event, context, cf.SUCCESS, responseData, 'deletedCGW')
+                    print('CGW did not exist, exiting')
+                    return
+                  try:
+                    delete_cgw(cgw_id)
+                    while cgw_status(cgw_id) != 'deleted':
+                        time.sleep(10)
+                    responseData['CGWID'] = cgw_id
+                    cf.send(event, context, cf.SUCCESS, responseData, 'deletedCGW')
+                  except Exception as e:
+                    responseData['error'] = str(e)
+                    cf.send(event, context, cf.SUCCESS, responseData, 'errorCGW')
+              else:
+                  cf.send(event, context, cf.SUCCESS, responseData, 'NoChangeCGW')
       Description: Lambda to create CGW
       Handler: index.handler
       MemorySize: 128
