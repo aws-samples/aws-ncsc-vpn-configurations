@@ -124,7 +124,6 @@ Resources:
               )
               return response
           def cgw_status(cgw_id):
-              print('Checking CGW Status')
               response = c.describe_customer_gateways(
                   CustomerGatewayIds=[
                       cgw_id,
@@ -132,15 +131,19 @@ Resources:
               )
               return response['CustomerGateways'][0]['State']
           def check_role():
-              response = iam_c.get_role(
-                  RoleName='AWSServiceRoleForVPCS2SVPN'
-              )
-              return response
+              Try:
+                  response = iam_c.get_role(
+                      RoleName='AWSServiceRoleForVPCS2SVPN'
+                  )
+                  return response
+              Except:
+                return False
           def create_role():
               iam_c.create_service_linked_role(
                   AWSServiceName='s2svpn.amazonaws.com',
               )
           def handler(event, context):
+              print(event)
               responseData = {}
               bgp = int(event['ResourceProperties']['bgpASN'])
               ip = event['ResourceProperties']['ipADDR']
@@ -158,14 +161,11 @@ Resources:
               if event['RequestType'] == 'Create':
                   gw_id, gw_exists = find_cgw(gateways, 'Name', dev_name)
                   if gw_exists:
-                      print('CGW with that name exists')
                       cf.send(event, context, cf.FAILED, responseData, 'created')
-                  print('Check SLR')
                   if check_role():
                       print('Role exists')
                   else:
                       create_role()
-                  print('Creating CGW')
                   try:
                       new_cgw = create_cgw(bgp, ip, cert, dev_name, stack_id)
                       cgw_id = new_cgw['CustomerGateway']['CustomerGatewayId']
@@ -180,7 +180,6 @@ Resources:
                   cgw_id, gw_exists = find_cgw(gateways, 'StackId', stack_id)
                   if not gw_exists:
                     cf.send(event, context, cf.SUCCESS, responseData, 'deletedCGW')
-                    print('CGW did not exist, exiting')
                     return
                   try:
                     delete_cgw(cgw_id)

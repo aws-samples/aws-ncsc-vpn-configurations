@@ -108,7 +108,6 @@ Resources:
               )
               return response
           def cgw_status(cgw_id):
-              print('Checking CGW Status')
               response = c.describe_customer_gateways(
               CustomerGatewayIds=[
                   cgw_id,
@@ -118,15 +117,19 @@ Resources:
               status = response['CustomerGateways'][0]['State']
               return status
           def check_role():
-              response = iam_c.get_role(
-              RoleName='AWSServiceRoleForVPCS2SVPN'
-              )
-              return response
+              try:
+                  response = iam_c.get_role(
+                  RoleName='AWSServiceRoleForVPCS2SVPN'
+                  )
+                  return response
+              except:
+                  return False
           def create_role():
               response = iam_c.create_service_linked_role(
               AWSServiceName='s2svpn.amazonaws.com',
               )
           def handler(event, context):
+              print(event)
 
               try:
                   responseData = {}
@@ -150,25 +153,18 @@ Resources:
 
                   if event['RequestType'] == 'Create':
                       if gw_exists:
-                          print('A CGW with the same name already exists')
                           cf.send(event, context, cf.FAILED, responseData, 'created')
 
-                      print('Checking if Service Role for VPN Exists')
                       try:
                           role_status = check_role()
-                          print('Service Role for VPN exists')
                       except Exception:
-                          print('Role does not exist; Creating Role')
                           create_role()
-                          print('Role created')
                       print('Creating CGW')
                       try:
                           new_cgw = create_cgw(bgp,ip,cert,dev_name)
                           cgw_id = new_cgw['CustomerGateway']['CustomerGatewayId']
                           while cgw_status(cgw_id) != 'available':
-                              print('CGW creating')
                               time.sleep(10)
-                          print('CGW created')
                           responseData['CGWID'] = cgw_id
                           cf.send(event, context, cf.SUCCESS, responseData, 'createdCGW')
                       except Exception as e:
