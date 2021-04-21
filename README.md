@@ -39,12 +39,11 @@ The second option will deploy a VPC VPN as per https://docs.aws.amazon.com/vpn/l
 
 ### Prerequisites
 
-To support certificates with the AWS Site-to-Site VPN service users will first need to create a subordinate certificate authority using [AWS Certificate Manager Private Certificate Authority](https://aws.amazon.com/certificate-manager/private-certificate-authority/). The following guides can be used to setup the CA and issue the certificate.
+- To support certificates with the AWS Site-to-Site VPN service users will first need to create a subordinate certificate authority using [AWS Certificate Manager Private Certificate Authority](https://aws.amazon.com/certificate-manager/private-certificate-authority/). The following guides can be used to setup the CA and issue the certificate.
 
-Create private subordinate CA and (if required) root CA by following the section "Procedures for Creating a CA
-" docuemtn [here](https://docs.aws.amazon.com/acm-pca/latest/userguide//PcaCreateCa.html#CA-procedures)
+- Create private subordinate CA and (if required) root CA by following the section "Procedures for Creating a CA" as docuemted [here](https://docs.aws.amazon.com/acm-pca/latest/userguide//PcaCreateCa.html#CA-procedures)
 
-If you didn't complete in the step above you must create the CA certificates by following the documentation, [Create private subordinate CA and (if required) root CA](https://docs.aws.amazon.com/acm-pca/latest/userguide//PCACertInstall.html#InstallSubordinateExternal)
+- If you didn't complete in the step above you must create the CA certificates by following the documentation, [Create private subordinate CA and (if required) root CA](https://docs.aws.amazon.com/acm-pca/latest/userguide//PCACertInstall.html#InstallSubordinateExternal)
 
 [Issue private RSA 2048 certificate for the VPN](https://docs.aws.amazon.com/acm/latest/userguide/gs-acm-request-private.html)
 
