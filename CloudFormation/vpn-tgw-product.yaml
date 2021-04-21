@@ -131,12 +131,12 @@ Resources:
               )
               return response['CustomerGateways'][0]['State']
           def check_role():
-              Try:
+              try:
                   response = iam_c.get_role(
                       RoleName='AWSServiceRoleForVPCS2SVPN'
                   )
                   return response
-              Except:
+              except:
                 return False
           def create_role():
               iam_c.create_service_linked_role(
