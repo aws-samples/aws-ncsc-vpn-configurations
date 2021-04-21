@@ -45,7 +45,7 @@ The second option will deploy a VPC VPN as per https://docs.aws.amazon.com/vpn/l
 
 - If you didn't complete in the step above you must create the CA certificates by following the documentation, [Create private subordinate CA and (if required) root CA](https://docs.aws.amazon.com/acm-pca/latest/userguide//PCACertInstall.html#InstallSubordinateExternal)
 
-[Issue private RSA 2048 certificate for the VPN](https://docs.aws.amazon.com/acm/latest/userguide/gs-acm-request-private.html)
+- [Issue private RSA 2048 certificate for the VPN](https://docs.aws.amazon.com/acm/latest/userguide/gs-acm-request-private.html)
 
 **Note:** copy the certificate arn from the certificate you just issued as you will need it in a later step.
 
